@@ -166,7 +166,11 @@ typeWrite = {
         net.writeBool(val)
     end,
     Player = function(val)
-        net.writeInt(5, 4)
+        net.writeUInt(5, 4)
+        net.writeEntity(val)
+    end,
+    Vehicle = function(val)
+        net.writeUInt(5, 4)
         net.writeEntity(val)
     end
 }
