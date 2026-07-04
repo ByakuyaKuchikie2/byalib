@@ -1,0 +1,225 @@
+
+--[[
+
+    Radio lib by ByakuyaKuchiki
+    functionality
+        :play(string)               - plays/queues an audio
+        :pause()                    - pauses/resumes the radio
+        :next()                     - plays the next audio in the queue
+        :isPlaying()                - returns if the radio is playing an audio
+        :getPlaying()               - returns the currently playing audio and its url
+        :getQueue()                 - returns the queue
+        :setVolume(number)          - sets the volume
+        :stop()                     - stops the audio and clears the queue
+        :setFade(number, number)    - sets the fade/distance of the audio
+        :skip()                     - stops the current audio and plays the next in queue
+        
+        :addThink(name, function)   - adds an internal think hook to the radio
+        :removeThink(name)          - removes an internal think hook from the radio
+        
+        :think()                    - used internally, but can be modified via radio.think = function()
+        
+        :addHook(type, name, func)  - for adding internal hooks
+        :removeHook(type, name)     - for removing internal hooks
+        
+    Hooks
+        - think
+            Called every tick
+            Arguments: None
+        
+        - onPlay
+            Called when an audio has begun playing
+            Arguments: None
+            
+        - onended
+            Called when an audio has been ended, skipped, or stopped
+            Arguments: None
+
+]]
+--@name radio_base
+--@author
+--@client
+--@include byalib/universal/queue.txt
+local radio = {}
+radio.__index = radio
+radio.queue = require('byalib/universal/queue.txt')
+
+radio.audio = nil
+radio.playing = false
+radio.volume = 0.35
+radio.fade = {128,256}
+radio.url = ''
+radio.noblock = true
+
+radio.hooks = {
+    think = {},
+    onplay = {},
+    onend = {}
+}
+
+local function execHooks(type)
+    type = string.lower(type)
+    for name, func in pairs(radio.hooks[type]) do
+        func()
+    end
+end
+
+function radio:useNoblock(state)
+    self.noblock = state
+end
+
+function radio:play(url)
+    if self.playing then
+        self.queue:push(url)
+        return
+    end
+    
+    self.playing = true
+    bass.loadURL(url, '3d' .. (self.noblock and ' noblock' or ''), function(snd, err, errtxt)
+        if err ~= 0 then 
+            print(errtxt)
+            self.audio = nil
+            self.url = ''
+            self.playing = false
+            return
+        end
+        
+        if snd then
+            snd:play()
+            snd:setVolume(self.volume)
+            snd:setFade(unpack(self.fade))
+            self.audio = snd
+            self.url = url
+            execHooks('onPlay')
+        end
+    end)
+end
+
+function radio:next()
+    if self.queue:isEmpty() then 
+        self.playing = false
+        self.audio = nil
+        self.url = ''
+        return 
+    end
+    
+    self.playing = false
+    local url = self.queue:pop()
+    self:play(url)
+end
+
+function radio:pause(state)
+    if not state then
+        self.playing = not self.playing
+    else
+        self.playing = state
+    end
+    
+    if isValid(self.audio) then 
+        if self.playing then
+            self.audio:pause()
+            return self.playing
+        end
+        
+        self.audio:play()
+    end
+    
+    return self.playing
+end
+
+function radio:isPlaying() 
+    return self.playing 
+end
+
+function radio:getPlaying()
+    if isValid(self.audio) then
+        return self.audio, self.url
+    end
+end
+
+function radio:getQueue()
+    return self.queue
+end
+
+function radio:queueIsEmpty()
+    return self.queue:isEmpty()
+end
+
+function radio:setVolume(n)
+    if isValid(self.audio) then
+        self.audio:setVolume(n)
+    end
+    
+    self.volume = math.clamp(n, 0, 10)
+end
+
+function radio:setFade(min,max)
+    if isValid(self.audio) then
+        self.audio:setFade(min,max)
+    end
+    
+    self.fade = {min,max}
+end
+
+function radio:stop()
+    if isValid(self.audio) then
+        self.audio:stop()
+    end
+    
+    self.audio = nil
+    self.playing = false
+    self.url = ''
+    
+    self.queue:clear()
+    execHooks('onend')
+end
+
+function radio:skip()
+    if isValid(self.audio) then
+        self.audio:stop()
+    end
+    
+    self:next()
+    execHooks('onend')
+end
+
+function radio:addHook(type, name, func)
+    type = string.lower(type)
+    name = string.lower(name)
+    if not self.hooks then error('radio.hooks is invalid'); return end
+    if not self.hooks[type] then error('radio.hooks.'..type..' is invalid'); return end
+    if self.hooks[type][name] then return end
+    self.hooks[type][name] = func
+    
+    return name
+end
+
+function radio:removeHook(type, name)
+    type = string.lower(type)
+    name = string.lower(name)
+    if not self.hooks then error('radio.hooks is invalid'); return end
+    if not self.hooks[type] then error('radio.hooks.'..type..' is invalid'); return end
+    if not self.hooks[type][name] then return end
+    self.hooks[type][name] = nil
+end
+
+function radio:think() -- can be overriden
+    if isValid(self.audio) and self.playing then
+        self.audio:setPos(chip():getPos())
+        
+        local time, duration = self.audio:getTime(), self.audio:getLength()
+        if time >= duration then
+            self.audio = nil
+            self:next()
+            execHooks('onEnd')
+        end
+    end
+end
+
+hook.add("Think", "radio.think", function()
+    radio:think()
+    
+    execHooks('think')
+end)
+
+return radio

@@ -1,0 +1,34 @@
+--@name bk_lib/queue.txt
+--@author
+--@shared
+
+local queue = {}
+queue.__index = queue
+queue.list = {}
+
+function queue:push(value)
+    table.insert(self.list, value)
+end
+
+function queue:pop()
+    return table.remove(self.list, 1)
+end
+
+function queue:count()
+    return #self.list
+end
+
+function queue:isEmpty()
+    return table.isEmpty(self.list)
+end
+
+function queue:getQueue()
+    return self.list
+end
+queue.getList = queue.getQueue
+
+function queue:clear()
+    table.empty(self.list)
+end
+
+return queue

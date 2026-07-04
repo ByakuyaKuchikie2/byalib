@@ -1,0 +1,289 @@
+--[[ai slop documentation because I hate making documentation
+================================================================================
+    Easy Net (Buildstruct easyNet Wrapper)
+    Author: ByakuyaKuchiki
+================================================================================
+
+    A dynamic networking wrapper for Starfall that completely automates data 
+    serialization. Eliminates the need to write manual type-checking, net.read*, 
+    or net.write* sequences.
+
+    ----------------------------------------------------------------------------
+    QUICK START EXAMPLES
+    ----------------------------------------------------------------------------
+    
+    [SERVER -> CLIENT]
+    -- Server Side:
+    net.send(ply, "UpdateScore", "Byakuya", 4500, Vector(0, 100, 5))
+
+    -- Client Side:
+    net.addCallback("UpdateScore", function(name, score, pos)
+        print(name, score, pos)
+    end)
+
+    ----------------------------------------------------------------------------
+    API REFERENCE
+    ----------------------------------------------------------------------------
+
+    [Callbacks & Setup]
+
+    * net.addCallback(identifier, callback)
+        Registers a listener for an incoming net message.
+        - identifier [String] : Unique name of the net message (case-insensitive).
+        - callback   [Function]: Function to execute. Variable arguments are 
+                                 unpacked automatically in the order they were sent.
+
+    [Server-to-Client / Shared Transmission]
+
+    * net.send(target, name, ...)
+        (SERVER ONLY) Sends data to a specific player or table of players.
+        - target [Player/Table] : The recipient(s). Pass `nil` to broadcast.
+        - name   [String]       : The identifier callback to trigger.
+        - ...    [Variadic]     : Any number of supported variables to transmit.
+
+    * net.broadcast(name, ...)
+        (SERVER ONLY) Quick shorthand to send data to all players currently connected.
+
+    * net.sendPVS(name, position, ...)
+        (SERVER ONLY) Sends a message to all players within the PVS (Potentially 
+        Visible Set) of a specific vector.
+
+    [Client-to-Server / Client-to-Client Transmission]
+
+    * net.send(name, ...)
+        (CLIENT ONLY) Sends data directly to the server.
+        - name [String]   : The identifier callback to trigger on the server.
+        - ...  [Variadic] : Any number of supported variables to transmit.
+
+    * net.sendPlayer(targetPlayer, name, ...)
+        (CLIENT ONLY) Routes a message through the server directly to another client.
+        - targetPlayer [Player] : The client player who should receive this data.
+        - name         [String] : The identifier callback on the receiving client.
+
+    ----------------------------------------------------------------------------
+    SUPPORTED DATA TYPES & PACKING OVERHEAD
+    ----------------------------------------------------------------------------
+    Every variable automatically incurs a 4-bit type header prefix.
+    
+    * string   (0) | number   (1) | vector   (2) | color    (3) 
+    * angle    (4) | entity   (5) | table    (6) | boolean  (7)
+
+    > NOTE ON TABLES: Tables add an extra 8-bit overhead for size. Sequential 
+    > NOTE ON TABLES: String keys are **NOT** supported
+    > arrays are completely supported, but complex mixed dictionaries may cause
+    > issues depending on inner type serialization limitations.
+================================================================================
+]]
+--@name Easy Net
+--@author ByakuyaKuchiki (Buildstruct easyNet)
+--@shared
+
+easynet = true
+
+local typeMap = {
+    [0] = "string",
+    "number",
+    "vector",
+    "color",
+    "angle",
+    "entity",
+    "table",
+    "boolean"
+}
+
+local function isColor(col)
+    if col.r == nil then return false end 
+    if col.g == nil then return false end 
+    if col.b == nil then return false end 
+    if col.a == nil then return false end 
+    return true
+end
+
+local function isVector(vec)
+    if vec.x == nil then return false end 
+    if vec.y == nil then return false end 
+    if vec.z == nil then return false end 
+    return true
+end
+
+local function isAngle(ang)
+    if ang.p == nil then return false end 
+    if ang.y == nil then return false end 
+    if ang.r == nil then return false end 
+    return true
+end
+
+local typeWrite
+typeWrite = {
+    string = function(val)
+        net.writeUInt(0, 4)
+        net.writeString(val)
+    end,
+    number = function(val)
+        net.writeUInt(1, 4)
+        net.writeFloat(val)
+    end,
+    vector = function(val)
+        net.writeUInt(2, 4)
+        net.writeVector(val)
+    end,
+    Color = function(val)
+        net.writeUInt(3, 4)
+        net.writeColor(val)
+    end,
+    angle = function(val)
+        net.writeUInt(4, 4)
+        net.writeAngle(val)
+    end,
+    entity = function(val)
+        net.writeUInt(5, 4)
+        net.writeEntity(val)
+    end,
+    table = function(val)
+        if isColor(val) then
+            typeWrite["Color"](val)
+            return
+        end
+        
+        if isVector(val) then
+            typeWrite["vector"](val)
+            return
+        end
+        
+        if isAngle(val) then
+            typeWrite["angle"](val)
+            return
+        end
+        
+        net.writeUInt(6, 4)
+        net.writeUInt(table.count(val), 8)
+        for _, v in pairs(val) do
+            typeWrite[type(v)](v)
+        end
+    end,
+    boolean = function(val)
+        net.writeUInt(7, 4)
+        net.writeBool(val)
+    end,
+    Player = function(val)
+        net.writeInt(5, 4)
+        net.writeEntity(val)
+    end
+}
+
+local typeRead
+typeRead = {
+    string = function(val)
+        table.insert(val, net.readString())
+    end,
+    number = function(val)
+        table.insert(val, net.readFloat())
+    end,
+    vector = function(val)
+        table.insert(val, net.readVector())
+    end,
+    color = function(val)
+        table.insert(val, net.readColor())
+    end,
+    angle = function(val)
+        table.insert(val, net.readAngle())
+    end,
+    entity = function(val)
+        table.insert(val, net.readEntity())
+    end,
+    table = function(val)
+        local inTable = {}
+        for i=1, net.readUInt(8) do
+            local _type = typeMap[net.readUInt(4)]
+            typeRead[_type](inTable)
+        end
+        table.insert(val, inTable)
+    end,
+    boolean = function(val)
+        table.insert(val, net.readBool())
+    end
+}
+
+local old_netsend = net.send 
+
+local callbacks = {}
+function net.addCallback(name, cb)
+    callbacks[name:lower()] = cb
+end
+
+local function send(ply, name, ...)
+    net.start("easynet")
+    net.writeString(name)
+    
+    local args = {...}
+    net.writeUInt(#args, 8)
+    
+    if #args > 0 then
+        for _, v in ipairs(args) do
+            typeWrite[type(v)](v)
+        end
+    end
+    
+    if CLIENT then old_netsend() end
+    if SERVER then old_netsend(ply) end
+end
+
+if SERVER then
+    function net.send(ply, name, ...)
+        send(ply, name, ...)
+    end
+    
+    local old_sendpvs = net.sendPVS
+    function net.sendPVS(name, pos, ...)
+        net.start("easynet")
+        net.writeString(name)
+        
+        local args = {...}
+        net.writeUInt(#args, 8)
+        
+        if #args > 0 then
+            for _, v in ipairs(args) do
+                typeWrite[type(v)](v)
+            end
+        end
+        
+        old_sendpvs(pos)
+    end
+    
+    function net.broadcast(name, ...)
+        net.send(nil, name, ...)
+    end
+elseif CLIENT then
+    function net.send(name, ...)
+        send(nil, name, player(), ...)
+    end
+    function net.sendPlayer(ply, name, ...)
+        send(nil, "NET:CLIENT2CLIENT:"..name, player(), ply, ...)
+    end
+end
+
+net.receive("easynet", function()
+    local name = net.readString()
+    if SERVER and string.startsWith(name, "NET:CLIENT2CLIENT:") then
+        local nargs = net.readUInt(8)
+        local args = {}
+        for i=1, nargs do
+            local _type = typeMap[net.readUInt(4)]
+            typeRead[_type](args)
+        end
+        local receiver = table.remove(args, 1)
+        net.send(receiver, string.sub(name, 19), unpack(args))
+        return
+    end
+    local callback = callbacks[name:lower()]
+    if not callback then return end
+    
+    local nargs = net.readUInt(8)
+    local args = {}
+    for i=1, nargs do
+        local _type = typeMap[net.readUInt(4)]
+        typeRead[_type](args)
+    end
+    
+    callback(unpack(args))
+end)

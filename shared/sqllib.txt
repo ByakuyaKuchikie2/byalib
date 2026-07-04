@@ -1,0 +1,250 @@
+--[[ai slop documentation because I hate making documentation
+================================================================================
+    SQL Library (Client-Routed SQLite Wrapper)
+    Author: ByakuyaKuchiki
+    SQLite version: 3.26.0 (https://sqlite.org/docs.html)
+================================================================================
+
+    A secure wrapper allowing both Server and Client realms to interact with 
+    GMod's native SQLite client database via 'easynet'. 
+
+    > CRITICAL SECURITY NOTE:
+    > This library operates EXCLUSIVELY on the Server and the Chip Owner's Client.
+    > If a non-owner client triggers or attempts to execute this script, it 
+    > will abort automatically to prevent database tampering.
+
+    ----------------------------------------------------------------------------
+    QUICK START EXAMPLES
+    ----------------------------------------------------------------------------
+    
+    [Parameterized Query with Callback]
+    local queryString = "SELECT level, tokens FROM user_stats WHERE steamid = ? AND active = ?;"
+    local parameters  = { "STEAM_0:1:123456", true }
+
+    SQL:query(queryString, parameters, function(results)
+        if not results then 
+            print("No data found or query failed.") 
+            return 
+        end
+        
+        -- Rows are returned as an array of dictionaries:
+        for i, row in ipairs(results) do
+            print(string.format("Level: %s | Tokens: %s", row.level, row.tokens))
+        end
+    end)
+
+    ----------------------------------------------------------------------------
+    API REFERENCE
+    ----------------------------------------------------------------------------
+
+    [Initialization & State]
+
+    * SQL:isInitialized() -> [Boolean]
+        Returns true if the database channel is awake and ready. 
+        - Client realm defaults immediately to `true`.
+        - Server realm waits dynamically until the owner client finishes loading.
+
+    * SQL:getHistory() -> [Table]
+        Returns an ordered array of all raw query strings processed during this 
+        session, with the most recent query at index `1`.
+
+    [Database Operations]
+
+    * SQL:query(queryStr, valuesTable, callback)
+        Prepares and executes an SQLite query.
+        - queryStr    [String]  : The SQL statement. Use '?' for safe parameters.
+        - valuesTable [Table]   : Array of values to sequentially replace every '?'.
+                                  Pass an empty table `{}` if no values are needed.
+        - callback    [Function]: Optional function fired when data returns.
+                                  Receives a [Table] of rows or `nil` on failure.
+
+    * SQL:exists(tableName, callback)
+        Checks if a specific table exists in the database.
+        - tableName   [String]  : The name of the table to verify.
+        - callback    [Function]: Receives a [Boolean] indicating existence.
+
+    * SQL:remove(tableName, callback)
+        Drops/removes a table from the database.
+        - tableName   [String]  : The name of the table to drop.
+        - callback    [Function]: Receives a [Boolean] indicating success.
+
+    * SQL:safeString(text, noQuotes, callback)
+        Escapes a string securely for raw SQL insertion.
+        - text        [String]  : The text string to escape.
+        - noQuotes    [Boolean] : Optional. If true, omits enclosing quotes. Defaults to true.
+        - callback    [Function]: Receives the securely escaped [String].
+
+    ----------------------------------------------------------------------------
+    AUTOMATIC TYPE ESCAPING RULES FOR '?'
+    ----------------------------------------------------------------------------
+    * Strings  -> Automatically wrapped in literal quotes (e.g. "Byakuya")
+    * Booleans -> Automatically converted to typical SQL bit-flags ("1" or "0")
+    * Others   -> (Numbers, Vectors, etc.) Converted cleanly via tostring()
+
+================================================================================
+]]
+--@name SQL Lib
+--@author ByakuyaKuchiki
+--@shared
+if not easynet then
+    --@include byalib/shared/easynet.txt
+    require("byalib/shared/easynet.txt")
+end
+local me = owner()
+if CLIENT and player() ~= me then return end 
+
+SQL = {}
+SQL.initialized = false
+SQL.history = {}
+local callbacks = {}
+
+if CLIENT then SQL.initialized = true 
+elseif SERVER then hook.add("ClientInitialized", "", function(ply) if ply == me then SQL.initialized = true end end) end
+    
+function SQL:isInitialized() return SQL.initialized end
+function SQL:getHistory() return SQL.history end
+local function addHistory(query) table.insert(SQL.history, 1, query) end
+
+function SQL:exists(name, callback)
+    if CLIENT then callback(sql.tableExists(name))
+    elseif SERVER then 
+        local hash = crc(name)
+        if not SQL.initialized then --wait for client
+            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
+                while not SQL.initialized do coroutine.yield() end 
+                net.send(me, "SQL:EXISTS", name, hash)
+                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
+            end))
+        else --client is initialized
+            net.send(me, "SQL:EXISTS", name, hash)
+        end
+        
+        if not callback then return end 
+        callbacks[hash] = callback
+    end
+end
+
+function SQL:remove(name, callback)
+    if CLIENT then callback(sql.tableRemove(name))
+    elseif SERVER then 
+        local hash = crc(name)
+        if not SQL.initialized then --wait for client
+            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
+                while not SQL.initialized do coroutine.yield() end 
+                net.send(me, "SQL:EXISTS", name, hash)
+                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
+            end))
+        else --client is initialized
+            net.send(me, "SQL:EXISTS", name, hash)
+        end
+        
+        if not callback then return end 
+        callbacks[hash] = callback
+    end
+end
+
+function SQL:safeString(text, noQuotes, callback)
+    noQuotes = noQuotes or true
+    if CLIENT then callback(sql.SQLStr(text, noQuotes))
+    elseif SERVER then 
+        local hash = crc(text)
+        if not SQL.initialized then --wait for client
+            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
+                while not SQL.initialized do coroutine.yield() end 
+                net.send(me, "SQL:SAFESTRING", text, noQuotes, hash)
+                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
+            end))
+        else --client is initialized
+            net.send(me, "SQL:SAFESTRING", text, noQuotes, hash)
+        end
+        
+        if not callback then return end 
+        callbacks[hash] = callback
+    end
+end
+
+local function formatQuery(queryString, params)
+    local index = 0
+    
+    local formatted = string.gsub(queryString, "%?", function()
+        index = index + 1
+        local val = params[index]
+        
+        if val == nil then return "?" end 
+        
+        if isstring(val) then
+            return string.format("'%s'", val)
+        elseif isbool(val) then
+            return val and "1" or "0" 
+        else
+            return tostring(val) 
+        end
+    end)
+    
+    return formatted
+end
+
+function SQL:query(query, values, callback)
+    if values then query = formatQuery(query, values) end
+    local hash = crc(query)
+    
+    if CLIENT then
+        callback(sql.query(query))
+        addHistory(query)
+    elseif SERVER then
+        if not SQL.initialized then --wait for client
+            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
+                while not SQL.initialized do coroutine.yield() end 
+                net.send(me, "SQL:QUERY", query, hash)
+                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
+            end))
+        else --client is initialized
+            net.send(me, "SQL:QUERY", query, hash)
+        end
+        
+        addHistory(query)
+        if not callback then return end 
+        callbacks[hash] = callback
+    end
+end
+
+if CLIENT then
+    net.addCallback("SQL:QUERY", function(query, hash)
+        addHistory(query)
+        local results = sql.query(query)
+        net.send("SQL:QUERYRESULTS", results and json.encode(results) or nil, hash)
+    end)
+    net.addCallback("SQL:EXISTS", function(name, hash)
+        local exists = sql.tableExists(name)
+        net.send("SQL:EXISTSRESULTS", exists, hash)
+    end)
+    net.addCallback("SQL:REMOVE", function(name, hash)
+        local wasRemoved = sql.tableRemove(name)
+        net.send("SQL:REMOVERESULTS", wasRemoved, hash)
+    end)
+    net.addCallback("SQL:SAFESTRING", function(text, noQuotes, hash)
+        local safeString = sql.SQLStr(text, noQuotes)
+        net.send("SQL:SAFESTRINGRESULTS", safeString, hash)
+    end)
+elseif SERVER then
+    net.addCallback("SQL:QUERYRESULTS", function(_, JSON, hash)
+        if not callbacks[hash] then return end 
+        callbacks[hash](json.decode(JSON))
+        callbacks[hash] = nil
+    end)
+    net.addCallback("SQL:EXISTSRESULTS", function(_, exists, hash)
+        if not callbacks[hash] then return end 
+        callbacks[hash](exists)
+        callbacks[hash] = nil
+    end)
+    net.addCallback("SQL:REMOVERESULTS", function(_, wasRemoved, hash)
+        if not callbacks[hash] then return end 
+        callbacks[hash](wasRemoved)
+        callbacks[hash] = nil
+    end)
+    net.addCallback("SQL:SAFESTRINGRESULTS", function(_, safestring, hash)
+        if not callbacks[hash] then return end 
+        callbacks[hash](safestring)
+        callbacks[hash] = nil
+    end)
+end
