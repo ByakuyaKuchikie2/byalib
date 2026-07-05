@@ -101,9 +101,9 @@ SQL.history = {}
 local callbacks = {}
 
 if CLIENT then SQL.initialized = true
-elseif SERVER then SQL.clientsInitialized = {}; hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) SQL.clientsInitialized[ply] = true; if ply == me then SQL.initialized = true end end); SQL.initQueue = {} end
+elseif SERVER then hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) if ply == me then SQL.initialized = true end end); SQL.initQueue = {} end
     
-function SQL:isInitialized(ply) return SQL.clientsInitialized[ply] or SQL.initialized end
+function SQL:isInitialized(ply) return SQL.initialized end
 function SQL:getHistory() return SQL.history end
 local function addHistory(query) table.insert(SQL.history, 1, query) end
 
