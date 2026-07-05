@@ -157,7 +157,8 @@ typeWrite = {
         
         net.writeUInt(6, 4)
         net.writeUInt(table.count(val), 8)
-        for _, v in pairs(val) do
+        for k, v in pairs(val) do
+            typeWrite[type(k)](k)
             typeWrite[type(v)](v)
         end
     end,
@@ -175,36 +176,49 @@ typeWrite = {
     end
 }
 
+local keyMap
+keyMap = {
+    string = net.readString,
+    number = net.readFloat,
+    vector = net.readVector,
+    color = net.readColor,
+    angle = net.readAngle,
+    entity = net.readEntity,
+    boolean = net.readBool
+}
+
 local typeRead
 typeRead = {
-    string = function(val)
-        table.insert(val, net.readString())
+    string = function(key, val)
+        val[key] = net.readString()
     end,
-    number = function(val)
-        table.insert(val, net.readFloat())
+    number = function(key, val)
+        val[key] = net.readFloat()
     end,
-    vector = function(val)
-        table.insert(val, net.readVector())
+    vector = function(key, val)
+        val[key] = net.readVector()
     end,
-    color = function(val)
-        table.insert(val, net.readColor())
+    color = function(key, val)
+        val[key] = net.readColor()
     end,
-    angle = function(val)
-        table.insert(val, net.readAngle())
+    angle = function(key, val)
+        val[key] = net.readAngle()
     end,
-    entity = function(val)
-        table.insert(val, net.readEntity())
+    entity = function(key, val)
+        val[key] = net.readEntity()
     end,
     table = function(val)
         local inTable = {}
-        for i=1, net.readUInt(8) do
+        for _=1, net.readUInt(8) do
+            local key = keyMap[typeMap[net.readUInt(4)]]()
             local _type = typeMap[net.readUInt(4)]
-            typeRead[_type](inTable)
+            typeRead[_type](key, inTable)
         end
+        
         table.insert(val, inTable)
     end,
-    boolean = function(val)
-        table.insert(val, net.readBool())
+    boolean = function(key, val)
+        val[key] = net.readBool()
     end
 }
 

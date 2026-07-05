@@ -222,7 +222,7 @@ if CLIENT then
     net.addCallback("SQL:QUERY", function(query, hash)
         addHistory(query)
         local results = sql.query(query)
-        net.send("SQL:QUERYRESULTS", (results and istable(results)) and json.encode(results) or nil, hash)
+        net.send("SQL:QUERYRESULTS", results, hash)
     end)
     net.addCallback("SQL:EXISTS", function(name, hash)
         local exists = sql.tableExists(name)
@@ -237,9 +237,8 @@ if CLIENT then
         net.send("SQL:SAFESTRINGRESULTS", safeString, hash)
     end)
 elseif SERVER then
-    net.addCallback("SQL:QUERYRESULTS", function(_, JSON, hash)
+    net.addCallback("SQL:QUERYRESULTS", function(_, results, hash)
         if not callbacks[hash] then return end
-        local results = (JSON and isstring(JSON)) and json.decode(JSON) or nil
         callbacks[hash](results)
         callbacks[hash] = nil
     end)
