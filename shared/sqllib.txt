@@ -86,7 +86,9 @@
 --@name SQL Lib
 --@author ByakuyaKuchiki
 --@shared
+local old_net
 if not easynet then
+    old_net = table.copy(net)
     --@include byalib/shared/easynet.txt
     require("byalib/shared/easynet.txt")
 end
@@ -258,3 +260,5 @@ elseif SERVER then
         callbacks[hash] = nil
     end)
 end
+
+if old_net then net = old_net end
