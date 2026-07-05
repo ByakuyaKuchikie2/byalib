@@ -95,12 +95,11 @@ if CLIENT and player() ~= me then return end
 
 SQL = {}
 SQL.initialized = false
-SQL.clientsInitialized = {}
 SQL.history = {}
 local callbacks = {}
 
-if CLIENT then SQL.initialized = true; SQL.queue = {}
-elseif SERVER then hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) SQL.clientsInitialized[ply] = true; if ply == me then SQL.initialized = true end end); SQL.initQueue = {} end
+if CLIENT then SQL.initialized = true
+elseif SERVER then SQL.clientsInitialized = {}; hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) SQL.clientsInitialized[ply] = true; if ply == me then SQL.initialized = true end end); SQL.initQueue = {} end
     
 function SQL:isInitialized(ply) return SQL.clientsInitialized[ply] or SQL.initialized end
 function SQL:getHistory() return SQL.history end
@@ -223,7 +222,7 @@ if CLIENT then
     net.addCallback("SQL:QUERY", function(query, hash)
         addHistory(query)
         local results = sql.query(query)
-        net.send("SQL:QUERYRESULTS", results and json.encode(results) or "", hash)
+        net.send("SQL:QUERYRESULTS", (results and istable(results)) and json.encode(results) or nil, hash)
     end)
     net.addCallback("SQL:EXISTS", function(name, hash)
         local exists = sql.tableExists(name)
@@ -239,9 +238,8 @@ if CLIENT then
     end)
 elseif SERVER then
     net.addCallback("SQL:QUERYRESULTS", function(_, JSON, hash)
-        SQL.debounce = false
         if not callbacks[hash] then return end
-        local results = JSON ~= "" and json.decode(JSON)
+        local results = (JSON and isstring(JSON)) and json.decode(JSON) or nil
         callbacks[hash](results)
         callbacks[hash] = nil
     end)
