@@ -11,3 +11,20 @@ function ENTITY:addToWhitelist() if lookup[self] then return false end; lookup[s
 function ENTITY:removeFromWhitelist() if not lookup[self] then return false end; table.remove(whitelist, lookup[self]); lookup[self] = nil; return true end
 
 function getWhitelist() return whitelist, lookup end
+function whitelist_iterator()
+    local i = 0
+    local n = table.count(whitelist) 
+    return function()
+        i = i + 1
+        if i <= n then return whitelist[i] end
+    end
+end
+
+function whitelist_indexedIterator()
+    local i = 0
+    local n = table.count(whitelist) 
+    return function()
+        i = i + 1
+        if i <= n then return i, whitelist[i] end
+    end
+end

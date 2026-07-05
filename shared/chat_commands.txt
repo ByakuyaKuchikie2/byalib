@@ -115,7 +115,9 @@ if SERVER then
     end
     
     hook.add("PlayerSay", "chat_commands", function(ply, text) 
-        if string.find(prefixes, text[1]) then
+        if string.find(prefixes, text[1], nil, true) then
+            if #text <= 1 then return end
+            
             local args = string.explode(" ", text:sub(2))
             local identifier = args[1]:lower()
             table.remove(args, 1) --remove first argument, which is the identifier
@@ -131,7 +133,12 @@ if SERVER then
             end
             
             if not commandExists and show_alerts then 
-                net.send(ply, "LIB_CC_NET", team.getColor(owner():getTeam()), string.format("[FROM %s] ",owner():getName()), Color(255,0,0), "[ERROR] ", Color(255,255,255), "no command found ", Color(255,0,0), ("%q"):format(identifier))
+                net.send(ply, "LIB_CC_NET", 
+                    team.getColor(owner():getTeam()), string.format("[FROM %s] ", owner():getName()), 
+                    Color(255,0,0), "[ERROR] ", 
+                    Color(255,255,255), "no command found ", 
+                    Color(255,0,0), ("%q"):format(identifier)
+                )
             end
             return customReturn
         end
