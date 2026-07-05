@@ -189,7 +189,8 @@ function SQL:query(query, values, callback)
     local hash = crc(query)
     
     if CLIENT then
-        callback(sql.query(query))
+        local results = sql.query(query)
+        if callback then callback(results) end
         addHistory(query)
     elseif SERVER then
         if not SQL.initialized then --wait for client
