@@ -99,8 +99,8 @@ SQL.clientsInitialized = {}
 SQL.history = {}
 local callbacks = {}
 
-if CLIENT then SQL.initialized = true 
-elseif SERVER then hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) SQL.clientsInitialized[ply] = true; if ply == me then SQL.initialized = true end end) end
+if CLIENT then SQL.initialized = true; SQL.queue = {}
+elseif SERVER then hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) SQL.clientsInitialized[ply] = true; if ply == me then SQL.initialized = true end end); SQL.initQueue = {} end
     
 function SQL:isInitialized(ply) return SQL.clientsInitialized[ply] or SQL.initialized end
 function SQL:getHistory() return SQL.history end
@@ -111,11 +111,7 @@ function SQL:exists(name, callback)
     elseif SERVER then 
         local hash = crc(name)
         if not SQL.initialized then --wait for client
-            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
-                while not SQL.initialized do coroutine.yield() end 
-                net.send(me, "SQL:EXISTS", name, hash)
-                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
-            end))
+            table.insert(SQL.initQueue, {"exists", name, hash})
         else --client is initialized
             net.send(me, "SQL:EXISTS", name, hash)
         end
@@ -130,11 +126,7 @@ function SQL:remove(name, callback)
     elseif SERVER then 
         local hash = crc(name)
         if not SQL.initialized then --wait for client
-            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
-                while not SQL.initialized do coroutine.yield() end 
-                net.send(me, "SQL:EXISTS", name, hash)
-                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
-            end))
+            table.insert(SQL.initQueue, {"remove", name, hash})
         else --client is initialized
             net.send(me, "SQL:EXISTS", name, hash)
         end
@@ -150,11 +142,7 @@ function SQL:safeString(text, noQuotes, callback)
     elseif SERVER then 
         local hash = crc(text)
         if not SQL.initialized then --wait for client
-            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
-                while not SQL.initialized do coroutine.yield() end 
-                net.send(me, "SQL:SAFESTRING", text, noQuotes, hash)
-                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
-            end))
+            table.insert(SQL.initQueue, {"safeString", text, hash, noQuotes})
         else --client is initialized
             net.send(me, "SQL:SAFESTRING", text, noQuotes, hash)
         end
@@ -196,11 +184,7 @@ function SQL:query(query, values, callback)
         local hash = crc(query)
         
         if not SQL.initialized then --wait for client
-            hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
-                while not SQL.initialized do coroutine.yield() end
-                net.send(me, "SQL:QUERY", query, hash)
-                hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
-            end))
+            table.insert(SQL.initQueue, {"query", query, hash})
         else --client is initialized
             net.send(me, "SQL:QUERY", query, hash)
         end
@@ -209,6 +193,30 @@ function SQL:query(query, values, callback)
         if not callback then return end 
         callbacks[hash] = callback
     end
+end
+
+--handle queueing
+if SERVER then
+    hook.add("Think", "initQueue", coroutine.wrap(function()
+        while not SQL.initialized do coroutine.yield() end
+        if table.isEmpty(SQL.initQueue) then hook.remove("Think", "initQueue"); return end
+        
+        for _, tbl in ipairs(SQL.initQueue) do
+            local type,value,hash,noQuotes = unpack(tbl)
+            
+            if type == "query" then
+                net.send(me, "SQL:QUERY", value, hash)
+            elseif type == "exists" then
+                net.send(me, "SQL:EXISTS", value, hash)
+            elseif type == "remove" then
+                net.send(me, "SQL:EXISTS", value, hash)
+            elseif type == "safeString" then
+                net.send(me, "SQL:SAFESTRING", value, noQuotes, hash)
+            end
+        end
+        
+        hook.remove("Think", "initQueue")
+    end))
 end
 
 if CLIENT then
@@ -231,6 +239,7 @@ if CLIENT then
     end)
 elseif SERVER then
     net.addCallback("SQL:QUERYRESULTS", function(_, JSON, hash)
+        SQL.debounce = false
         if not callbacks[hash] then return end
         local results = JSON ~= "" and json.decode(JSON)
         callbacks[hash](results)
