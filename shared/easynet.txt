@@ -189,36 +189,43 @@ keyMap = {
 
 local typeRead
 typeRead = {
-    string = function(key, val)
-        val[key] = net.readString()
+    string = function(val, key)
+        if key then val[key] = net.readString(); return end
+        table.insert(val, net.readString())
     end,
-    number = function(key, val)
-        val[key] = net.readFloat()
+    number = function(val, key)
+        if key then val[key] = net.readFloat(); return end
+        table.insert(val, net.readFloat())
     end,
-    vector = function(key, val)
-        val[key] = net.readVector()
+    vector = function(val, key)
+        if key then val[key] = net.readVector(); return end
+        table.insert(val, net.readVector())
     end,
-    color = function(key, val)
-        val[key] = net.readColor()
+    color = function(val, key)
+        if key then val[key] = net.readColor(); return end
+        table.insert(val, net.readColor())
     end,
-    angle = function(key, val)
-        val[key] = net.readAngle()
+    angle = function(val, key)
+        if key then val[key] = net.readAngle(); return end
+        table.insert(val, net.readAngle())
     end,
-    entity = function(key, val)
-        val[key] = net.readEntity()
+    entity = function(val, key)
+        if key then val[key] = net.readEntity(); return end
+        table.insert(val, net.readEntity())
     end,
     table = function(val)
         local inTable = {}
         for _=1, net.readUInt(8) do
             local key = keyMap[typeMap[net.readUInt(4)]]()
             local _type = typeMap[net.readUInt(4)]
-            typeRead[_type](key, inTable)
+            typeRead[_type](inTable, key)
         end
         
         table.insert(val, inTable)
     end,
-    boolean = function(key, val)
-        val[key] = net.readBool()
+    boolean = function(val, key)
+        if key then val[key] = net.readBool(); return end
+        table.insert(val, net.readBool())
     end
 }
 
