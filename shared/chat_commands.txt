@@ -1,0 +1,150 @@
+--[[ai slop documentation because I hate making documentation
+================================================================================
+    Simple Chat Commands Library (with Aliases)
+    Author: ByakuyaKuchiki
+================================================================================
+
+    A lightweight, server-side chat command manager utilizing Starfall/GLua hooks.
+    Supports customizable prefixes, owner-locked commands, automatic error alerts,
+    and command aliasing.
+
+    ----------------------------------------------------------------------------
+    QUICK START EXAMPLE
+    ----------------------------------------------------------------------------
+    chat.setOwnerOnly(false)
+    chat.addCommand("teleport", function(ply, fullText, args)
+        -- Command logic here
+        return "" 
+    end)
+    
+    -- Create shortcuts for the command:
+    chat.addAlias("teleport", "tp")
+    chat.addAlias("teleport", "goto")
+
+    -- Note: chat.removeCommand("tp") will safely remove just the 'tp' shortcut!
+
+    ----------------------------------------------------------------------------
+    API REFERENCE
+    ----------------------------------------------------------------------------
+
+    [Configuration]
+    
+    * chat.setOwnerOnly(bool)
+        Sets whether the NEXT created command is exclusive to the chip owner.
+        Default state upon initialization is `true`.
+
+    * chat.addPrefix(string)
+        Adds a single character to the allowed command prefixes.
+        Default prefixes: "!", "/", "."
+
+    * chat.showAlerts(bool)
+        Enables or disables network error notifications sent to players 
+        who type an invalid command. Default is `true`.
+
+    [Command Management]
+
+    * chat.addCommand(name, callback)
+        Registers a new base chat command.
+        
+        Callback Parameters passed to your function:
+            1. ply      [Player]  - The player who executed the command.
+            2. fullText [String]  - The raw string of all arguments combined.
+            3. args     [Table]   - An array of individual space-separated arguments.
+            
+        Callback Return:
+            Return a string (e.g., "") to override or suppress the player's chat.
+
+    * chat.addAlias(commandName, aliasName)
+        Points a new command string to an existing command's callback and permissions.
+        > WARNING: The existing base command must be registered first before you 
+        > can add an alias to it.
+        
+    * chat.removeCommand(name)
+        Unregisters a command or an alias by its identifier name.
+        > NOTE: If you pass an alias name here, only that specific alias is unlinked.
+        > The base command and its other aliases will remain intact.
+
+================================================================================
+]]
+--@name Chat commands
+--@author ByakuyaKuchiki
+--@shared
+local old_net
+if not easynet then
+    old_net = table.copy(net)
+    --@include byalib/shared/easynet.txt
+    require("byalib/shared/easynet.txt")
+end
+
+if SERVER then
+    chat = chat or {}
+    
+    local commands = {}
+    local prefixes = "!/."
+    local show_alerts = true
+    local owner_only = true
+    
+    function chat.setOwnerOnly(bool)
+        if bool == nil or not isbool(bool) then return end
+        owner_only = bool
+    end
+    
+    function chat.addPrefix(prefix)
+        if string.find(prefixes, prefix) then return end
+        prefixes = prefixes..prefix
+    end
+    
+    function chat.addAlias(command, alias)
+        if not commands[command] then return end
+        commands[alias] = commands[command]
+    end
+    
+    function chat.showAlerts(bool)
+        if not bool or not isbool(bool) then return end
+        show_alerts = bool
+    end
+    
+    function chat.addCommand(identifier, callback)
+        commands[identifier:lower()] = {callback, owner_only}
+    end
+    
+    function chat.removeCommand(identifier)
+        if commands[identifier:lower()] then
+            commands[identifier:lower()] = nil
+        end
+    end
+    
+    hook.add("PlayerSay", "chat_commands", function(ply, text) 
+        if string.find(prefixes, text[1]) then
+            local args = string.explode(" ", text:sub(2))
+            local identifier = args[1]:lower()
+            table.remove(args, 1) --remove first argument, which is the identifier
+            
+            local commandExists = false
+            local customReturn = ""
+            if commands[identifier] then
+                local callback, owner_only = unpack(commands[identifier])
+                if owner_only and ply ~= owner() then return "" end
+                
+                customReturn = callback(ply, table.concat(args, " ", 2), args)
+                commandExists = true
+            end
+            
+            if not commandExists and show_alerts then 
+                net.send(ply, "LIB_CC_NET", team.getColor(owner():getTeam()), string.format("[FROM %s] ",owner():getName()), Color(255,0,0), "[ERROR] ", Color(255,255,255), "no command found ", Color(255,0,0), ("%q"):format(identifier))
+            end
+            return customReturn
+        end
+    end)
+elseif CLIENT then
+    net.addCallback("LIB_CC_NET", function(...)
+        printConsole(...)
+        
+        local args = {...}
+        table.remove(args, 1)
+        table.remove(args, 1)
+        print(unpack(args))
+    end)
+end
+
+if old_net then net = old_net end

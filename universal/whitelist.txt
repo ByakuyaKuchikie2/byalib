@@ -1,0 +1,13 @@
+--@name
+--@author
+--@shared
+--- ultra simple whitelisting
+local whitelist, lookup = {},{}
+
+local ENTITY = getMethods("Entity")
+
+function ENTITY:isWhitelisted() return lookup[self] and true or false end
+function ENTITY:addToWhitelist() if lookup[self] then return false end; lookup[self] = table.insert(whitelist, self); return true end
+function ENTITY:removeFromWhitelist() if not lookup[self] then return false end; table.remove(whitelist, lookup[self]); lookup[self] = nil; return true end
+
+function getWhitelist() return whitelist, lookup end

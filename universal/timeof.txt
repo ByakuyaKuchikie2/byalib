@@ -1,0 +1,88 @@
+--@name
+--@author
+--@shared
+-- these are from bsa
+
+local TIME = {}
+
+local units = {
+    {name = "year", seconds = 365 * 24 * 60 * 60},
+    {name = "month", seconds = 30 * 24 * 60 * 60},
+    {name = "week", seconds = 7 * 24 * 60 * 60},
+    {name = "day", seconds = 24 * 60 * 60},
+    {name = "hour", seconds = 60 * 60},
+    {name = "minute", seconds = 60},
+    {name = "second", seconds = 1}
+}
+TIME.timetoname = function(seconds)
+    for _, unit in ipairs(units) do
+        local count = math.floor(seconds / unit.seconds)
+        if count >= 1 then
+            return count .. " " .. unit.name .. (count > 1 and "s" or "")
+        end
+    end
+    return "0 seconds"
+end
+
+local units = {
+    {abbr = "y", seconds = 365 * 24 * 60 * 60},
+    {abbr = "mo", seconds = 30 * 24 * 60 * 60},
+    {abbr = "w", seconds = 7 * 24 * 60 * 60},
+    {abbr = "d", seconds = 24 * 60 * 60},
+    {abbr = "h", seconds = 60 * 60},
+    {abbr = "m", seconds = 60},
+    {abbr = "s", seconds = 1}
+}
+
+TIME.timeof = function(seconds)
+    if seconds <= 0 then
+        return "0S"
+    end
+
+    local result = {}
+
+    for _, unit in ipairs(units) do
+        local count = math.floor(seconds / unit.seconds)
+        if count > 0 then
+            table.insert(result, count .. unit.abbr)
+            seconds = seconds - (count * unit.seconds)
+        end
+    end
+
+    return table.concat(result, " ")
+end
+
+local times = {
+    s  = 1,
+    m  = 60,
+    h  = 3600,
+    d  = 86400,
+    w  = 604800,
+    mo = 2628000,
+    y  = 31536000
+}
+local function time(length)
+    if length == nil or length == false then
+        return false
+    end
+    local time, found = tonumber(length), false
+    if isnumber(length) then
+        time, found = length, true
+    elseif time then
+        found = true
+    else
+        time = 0
+        for t, u in length:gmatch("(%d+)(%a+)") do
+            u = times[u]
+            if u then
+                time = time + (u * t)
+                found = true
+            end
+        end
+    end
+    if not found then return false end
+    return math.max(time, 0)
+end
+
+TIME.toseconds = time
+return TIME
