@@ -95,13 +95,14 @@ if CLIENT and player() ~= me then return end
 
 SQL = {}
 SQL.initialized = false
+SQL.clientsInitialized = {}
 SQL.history = {}
 local callbacks = {}
 
 if CLIENT then SQL.initialized = true 
-elseif SERVER then hook.add("ClientInitialized", "", function(ply) if ply == me then SQL.initialized = true end end) end
+elseif SERVER then hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) SQL.clientsInitialized[ply] = true; if ply == me then SQL.initialized = true end end) end
     
-function SQL:isInitialized() return SQL.initialized end
+function SQL:isInitialized(ply) return SQL.clientsInitialized[ply] or SQL.initialized end
 function SQL:getHistory() return SQL.history end
 local function addHistory(query) table.insert(SQL.history, 1, query) end
 
@@ -186,16 +187,17 @@ end
 
 function SQL:query(query, values, callback)
     if values then query = formatQuery(query, values) end
-    local hash = crc(query)
     
     if CLIENT then
         local results = sql.query(query)
         if callback then callback(results) end
         addHistory(query)
     elseif SERVER then
+        local hash = crc(query)
+        
         if not SQL.initialized then --wait for client
             hook.add("Think", "SQL:WAITFORCLIENT:"..hash, coroutine.wrap(function()
-                while not SQL.initialized do coroutine.yield() end 
+                while not SQL.initialized do coroutine.yield() end
                 net.send(me, "SQL:QUERY", query, hash)
                 hook.remove("Think", "SQL:WAITFORCLIENT:"..hash)
             end))
@@ -213,7 +215,7 @@ if CLIENT then
     net.addCallback("SQL:QUERY", function(query, hash)
         addHistory(query)
         local results = sql.query(query)
-        net.send("SQL:QUERYRESULTS", results and json.encode(results) or nil, hash)
+        net.send("SQL:QUERYRESULTS", results and json.encode(results) or "", hash)
     end)
     net.addCallback("SQL:EXISTS", function(name, hash)
         local exists = sql.tableExists(name)
@@ -229,8 +231,9 @@ if CLIENT then
     end)
 elseif SERVER then
     net.addCallback("SQL:QUERYRESULTS", function(_, JSON, hash)
-        if not callbacks[hash] then return end 
-        callbacks[hash](json.decode(JSON))
+        if not callbacks[hash] then return end
+        local results = JSON ~= "" and json.decode(JSON)
+        callbacks[hash](results)
         callbacks[hash] = nil
     end)
     net.addCallback("SQL:EXISTSRESULTS", function(_, exists, hash)
