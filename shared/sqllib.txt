@@ -103,7 +103,7 @@ local callbacks = {}
 if CLIENT then SQL.initialized = true
 elseif SERVER then hook.add("ClientInitialized", "SQL:WAITINGFOROWNER", function(ply) if ply == me then SQL.initialized = true end end); SQL.initQueue = {} end
     
-function SQL:isInitialized(ply) return SQL.initialized end
+function SQL:isInitialized() return SQL.initialized end
 function SQL:getHistory() return SQL.history end
 local function addHistory(query) table.insert(SQL.history, 1, query) end
 
@@ -138,7 +138,7 @@ function SQL:remove(name, callback)
 end
 
 function SQL:safeString(text, noQuotes, callback)
-    noQuotes = noQuotes or true
+    if noQuotes == nil then noQuotes = true end
     if CLIENT then callback(sql.SQLStr(text, noQuotes))
     elseif SERVER then 
         local hash = crc(text)
@@ -160,10 +160,10 @@ local function formatQuery(queryString, params)
         index = index + 1
         local val = params[index]
         
-        if val == nil then return "?" end 
+        if val == nil then return error("missing value for placeholder #" .. index) end 
         
         if isstring(val) then
-            return string.format("'%s'", val)
+            return string.format("'%s'", sql.SQLStr(val, true))
         elseif isbool(val) then
             return val and "1" or "0" 
         else
@@ -210,7 +210,7 @@ if SERVER then
             elseif type == "exists" then
                 net.send(me, "SQL:EXISTS", value, hash)
             elseif type == "remove" then
-                net.send(me, "SQL:EXISTS", value, hash)
+                net.send(me, "SQL:REMOVE", value, hash)
             elseif type == "safeString" then
                 net.send(me, "SQL:SAFESTRING", value, noQuotes, hash)
             end
@@ -239,26 +239,16 @@ if CLIENT then
         net.send("SQL:SAFESTRINGRESULTS", safeString, hash)
     end)
 elseif SERVER then
-    net.addCallback("SQL:QUERYRESULTS", function(_, hash, results)
-        if not callbacks[hash] then return end
-        callbacks[hash](results)
-        callbacks[hash] = nil
-    end)
-    net.addCallback("SQL:EXISTSRESULTS", function(_, exists, hash)
-        if not callbacks[hash] then return end 
-        callbacks[hash](exists)
-        callbacks[hash] = nil
-    end)
-    net.addCallback("SQL:REMOVERESULTS", function(_, wasRemoved, hash)
-        if not callbacks[hash] then return end 
-        callbacks[hash](wasRemoved)
-        callbacks[hash] = nil
-    end)
-    net.addCallback("SQL:SAFESTRINGRESULTS", function(_, safestring, hash)
-        if not callbacks[hash] then return end 
-        callbacks[hash](safestring)
-        callbacks[hash] = nil
-    end)
+    --all the callbacks are the same for the most part, run in a for loop
+    for _, type in ipairs({"QUERY", "EXISTS", "REMOVE", "SAFESTRING"}) do
+        net.addCallback(("SQL:%sRESULTS"):format(type), function(_, ...)
+            local value, hash = ...
+            if type == "QUERY" then hash,value = value,hash end --query swaps these values
+            if not callbacks[hash] then return end 
+            callbacks[hash](value)
+            callbacks[hash] = nil
+        end)
+    end
 end
 
 if old_net then net = old_net end

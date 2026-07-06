@@ -213,14 +213,14 @@ typeRead = {
         if key then val[key] = net.readEntity(); return end
         table.insert(val, net.readEntity())
     end,
-    table = function(val)
+    table = function(val, key)
         local inTable = {}
         for _=1, net.readUInt(8) do
             local key = keyMap[typeMap[net.readUInt(4)]]()
             local _type = typeMap[net.readUInt(4)]
             typeRead[_type](inTable, key)
         end
-        
+        if key then val[key] = inTable; return end
         table.insert(val, inTable)
     end,
     boolean = function(val, key)
@@ -283,7 +283,7 @@ elseif CLIENT then
         send(nil, name, player(), ...)
     end
     function net.sendPlayer(ply, name, ...)
-        send(nil, "NET:CLIENT2CLIENT:"..name, player(), ply, ...)
+        send(nil, "NET:CLIENT2CLIENT:"..name, ply, player(), ...)
     end
 end
 
