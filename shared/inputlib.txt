@@ -1,0 +1,33 @@
+--@name InputLib
+--@author ByakuyaKuchiki
+--@shared
+
+local net
+local old_net
+if not easynet then
+    old_net = table.copy(net)
+    --@include byalib/shared/easynet.txt
+    net = require("byalib/shared/easynet.txt")
+end
+
+local me = owner()
+if SERVER then
+    net.addCallback("INPUT:TRIGGERED", function(ply, key, state)
+        hook.run("KeyInput", ply, key, state)
+    end)
+elseif CLIENT then
+    local timeSinceLastNet, minDelay = 0, 0.05
+    local limitNet = false --enable to limit how many net messages are sent
+    
+    --Key Down
+    hook.add("InputPressed", "INPUTLIB",  function(key) 
+        if limitNet and timeSinceLastNet+minDelay > timer.systime() then return end; timeSinceLastNet = timer.systime()
+        net.send("INPUT:TRIGGERED", key or -1, true);  hook.run("KeyInput", key or -1, true)  end)
+        
+    --Key Up
+    hook.add("InputReleased", "INPUTLIB", function(key) 
+        if limitNet and timeSinceLastNet+minDelay > timer.systime() then return end; timeSinceLastNet = timer.systime()
+        net.send("INPUT:TRIGGERED", key or -1, false); hook.run("KeyInput", key or -1, false) end)
+end
+
+if old_net then net = old_net end

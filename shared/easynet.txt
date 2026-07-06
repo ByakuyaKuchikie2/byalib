@@ -312,3 +312,5 @@ net.receive("easynet", function()
     
     callback(unpack(args))
 end)
+
+return net 

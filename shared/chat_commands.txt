@@ -69,11 +69,13 @@
 --@name Chat commands
 --@author ByakuyaKuchiki
 --@shared
-local old_net
+
+
+local old_net, net
 if not easynet then
     old_net = table.copy(net)
     --@include byalib/shared/easynet.txt
-    require("byalib/shared/easynet.txt")
+    net = require("byalib/shared/easynet.txt")
 end
 
 if SERVER then
