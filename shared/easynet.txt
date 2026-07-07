@@ -42,11 +42,11 @@
         - ...    [Variadic]     : Any number of supported variables to transmit.
 
     * net.broadcast(name, ...)
-        (SERVER ONLY) Quick shorthand to send data to all players currently connected.
+        (SERVER ONLY) Quick shorthand to send data to all connected players.
 
     * net.sendPVS(name, position, ...)
         (SERVER ONLY) Sends a message to all players within the PVS (Potentially 
-        Visible Set) of a specific vector.
+                      Visible Set) of a specific vector position.
 
     [Client-to-Server / Client-to-Client Transmission]
 
@@ -63,17 +63,16 @@
     ----------------------------------------------------------------------------
     SUPPORTED DATA TYPES & PACKING OVERHEAD
     ----------------------------------------------------------------------------
-    Every variable automatically incurs a 4-bit type header prefix.
+    Every variable dynamically wrapped incurs a 4-bit type header prefix.
     
-    * string   (0) | number   (1) | vector   (2) | color    (3) 
-    * angle    (4) | entity   (5) | table    (6) | boolean  (7)
+    * string  (0) | number  (1) | vector  (2) | color   (3) 
+    * angle   (4) | entity  (5) | table   (6) | boolean (7)
 
-    > NOTE ON TABLES: Tables add an extra 8-bit overhead for size. Sequential 
-    > NOTE ON TABLES: String keys are **NOT** supported
-    > arrays are completely supported, but complex mixed dictionaries may cause
-    > issues depending on inner type serialization limitations.
-================================================================================
-]]
+    > NOTE ON TABLES: Tables add an initial 8-bit overhead for size. Key-value pairs 
+    > are written sequentially. Both sequential arrays and key-value dictionaries 
+    > (including string keys) are supported. Player and Vehicle structures are 
+    > automatically serialized under the entity (5) ID mapping.
+==============================================================================]]
 --@name Easy Net
 --@author ByakuyaKuchiki (Buildstruct easyNet)
 --@shared
@@ -123,7 +122,7 @@ typeWrite = {
         net.writeUInt(1, 4)
         net.writeFloat(val)
     end,
-    vector = function(val)
+    Vector = function(val)
         net.writeUInt(2, 4)
         net.writeVector(val)
     end,
@@ -131,11 +130,11 @@ typeWrite = {
         net.writeUInt(3, 4)
         net.writeColor(val)
     end,
-    angle = function(val)
+    Angle = function(val)
         net.writeUInt(4, 4)
         net.writeAngle(val)
     end,
-    entity = function(val)
+    Entity = function(val)
         net.writeUInt(5, 4)
         net.writeEntity(val)
     end,
@@ -245,6 +244,7 @@ local function send(ply, name, ...)
     
     if #args > 0 then
         for _, v in ipairs(args) do
+            print(type(v))
             typeWrite[type(v)](v)
         end
     end

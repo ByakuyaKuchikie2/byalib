@@ -51,7 +51,7 @@
     [Database Operations]
 
     * SQL:query(queryStr, valuesTable, callback)
-        Prepares and executes an SQLite query.
+        Prepares and executes an SQLite query string.
         - queryStr    [String]  : The SQL statement. Use '?' for safe parameters.
         - valuesTable [Table]   : Array of values to sequentially replace every '?'.
                                   Pass an empty table `{}` if no values are needed.
@@ -64,9 +64,9 @@
         - callback    [Function]: Receives a [Boolean] indicating existence.
 
     * SQL:remove(tableName, callback)
-        Drops/removes a table from the database.
+        Drops/removes a table from the client-side database safely.
         - tableName   [String]  : The name of the table to drop.
-        - callback    [Function]: Receives a [Boolean] indicating success.
+        - callback    [Function]: Receives a [Boolean] indicating completion status.
 
     * SQL:safeString(text, noQuotes, callback)
         Escapes a string securely for raw SQL insertion.
@@ -77,12 +77,11 @@
     ----------------------------------------------------------------------------
     AUTOMATIC TYPE ESCAPING RULES FOR '?'
     ----------------------------------------------------------------------------
-    * Strings  -> Automatically wrapped in literal quotes (e.g. "Byakuya")
-    * Booleans -> Automatically converted to typical SQL bit-flags ("1" or "0")
-    * Others   -> (Numbers, Vectors, etc.) Converted cleanly via tostring()
+    * Strings  -> Automatically sanitized and wrapped in single quotes (e.g. 'Byakuya')
+    * Booleans -> Converted into standard SQL integer bit-flags ('1' or '0')
+    * Others   -> (Numbers, Vectors, Angles, etc.) Cast cleanly via tostring()
 
-================================================================================
-]]
+==============================================================================]]
 --@name SQL Lib
 --@author ByakuyaKuchiki
 --@shared
