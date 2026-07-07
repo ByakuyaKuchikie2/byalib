@@ -143,13 +143,13 @@ end
 function SQL:safeString(text, noQuotes, callback)
     text = text:gsub("'","''")
     
-    local null_chr = string.find(str, "\0")
+    local null_chr = string.find(text, "\0")
     if null_chr then
-        str = string.sub(str, 1, null_chr - 1)
+        text = string.sub(text, 1, null_chr - 1)
     end
     
     if noQuotes then
-        return str
+        return text
     end
     
     local newStr = "'" .. text .. "'"
