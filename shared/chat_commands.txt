@@ -70,7 +70,6 @@
 --@author ByakuyaKuchiki
 --@shared
 
-
 local old_net
 local net = net
 if not easynet then
@@ -131,7 +130,7 @@ if SERVER then
                 local callback, owner_only = unpack(commands[identifier])
                 if owner_only and ply ~= owner() then return "" end
                 
-                customReturn = callback(ply, table.concat(args, " ", 2), args)
+                customReturn = callback(ply, table.concat(args, " "), args)
                 commandExists = true
             end
             

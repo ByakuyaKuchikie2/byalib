@@ -85,6 +85,7 @@
 --@name SQL Lib
 --@author ByakuyaKuchiki
 --@shared
+
 local old_net
 local net = net
 if not easynet then
@@ -92,6 +93,7 @@ if not easynet then
     --@include byalib/shared/easynet.txt
     net = require("byalib/shared/easynet.txt")
 end
+
 local me = owner()
 if CLIENT and player() ~= me then return end 
 
@@ -137,20 +139,22 @@ function SQL:remove(name, callback)
     end
 end
 
+--https://github.com/Facepunch/garrysmod/blob/master/garrysmod/lua/includes/util/sql.lua#L27-L27
 function SQL:safeString(text, noQuotes, callback)
-    if noQuotes == nil then noQuotes = true end
-    if CLIENT then callback(sql.SQLStr(text, noQuotes))
-    elseif SERVER then 
-        local hash = crc(text)
-        if not SQL.initialized then --wait for client
-            table.insert(SQL.initQueue, {"safeString", text, hash, noQuotes})
-        else --client is initialized
-            net.send(me, "SQL:SAFESTRING", text, noQuotes, hash)
-        end
-        
-        if not callback then return end 
-        callbacks[hash] = callback
+    text = text:gsub("'","''")
+    
+    local null_chr = string.find(str, "\0")
+    if null_chr then
+        str = string.sub(str, 1, null_chr - 1)
     end
+    
+    if noQuotes then
+        return str
+    end
+    
+    local newStr = "'" .. text .. "'"
+    if callback then callback(newStr) end
+    return newStr
 end
 
 local function formatQuery(queryString, params)
@@ -163,7 +167,7 @@ local function formatQuery(queryString, params)
         if val == nil then return error("missing value for placeholder #" .. index) end 
         
         if isstring(val) then
-            return string.format("'%s'", sql.SQLStr(val, true))
+            return string.format("'%s'", SQL:safeString(val, true), true)
         elseif isbool(val) then
             return val and "1" or "0" 
         else
@@ -203,7 +207,7 @@ if SERVER then
         if table.isEmpty(SQL.initQueue) then hook.remove("Think", "initQueue"); return end
         
         for _, tbl in ipairs(SQL.initQueue) do
-            local type,value,hash,noQuotes = unpack(tbl)
+            local type,value,hash = unpack(tbl)
             
             if type == "query" then
                 net.send(me, "SQL:QUERY", value, hash)
@@ -211,8 +215,6 @@ if SERVER then
                 net.send(me, "SQL:EXISTS", value, hash)
             elseif type == "remove" then
                 net.send(me, "SQL:REMOVE", value, hash)
-            elseif type == "safeString" then
-                net.send(me, "SQL:SAFESTRING", value, noQuotes, hash)
             end
         end
         
@@ -234,13 +236,9 @@ if CLIENT then
         local wasRemoved = sql.tableRemove(name)
         net.send("SQL:REMOVERESULTS", wasRemoved, hash)
     end)
-    net.addCallback("SQL:SAFESTRING", function(text, noQuotes, hash)
-        local safeString = sql.SQLStr(text, noQuotes)
-        net.send("SQL:SAFESTRINGRESULTS", safeString, hash)
-    end)
 elseif SERVER then
     --all the callbacks are the same for the most part, run in a for loop
-    for _, type in ipairs({"QUERY", "EXISTS", "REMOVE", "SAFESTRING"}) do
+    for _, type in ipairs({"QUERY", "EXISTS", "REMOVE"}) do
         net.addCallback(("SQL:%sRESULTS"):format(type), function(_, ...)
             local value, hash = ...
             if type == "QUERY" then hash,value = value,hash end --query swaps these values
