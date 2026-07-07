@@ -1,3 +1,9 @@
+--[[
+    Ultra Simple input lib
+    get down keys from 'InputPressed' and 'InputRelease' hooks from client to server
+    provide hook 'KeyInput' on both server and client
+]]
+
 --@name InputLib
 --@author ByakuyaKuchiki
 --@shared
