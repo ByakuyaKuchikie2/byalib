@@ -8,8 +8,8 @@
 --@author ByakuyaKuchiki
 --@shared
 
-local net
 local old_net
+local net = net
 if not easynet then
     old_net = table.copy(net)
     --@include byalib/shared/easynet.txt
