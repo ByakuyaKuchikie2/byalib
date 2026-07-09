@@ -172,6 +172,14 @@ typeWrite = {
     Vehicle = function(val)
         net.writeUInt(5, 4)
         net.writeEntity(val)
+    end,
+    Npc = function(val)
+        net.writeUInt(5, 4)
+        net.writeEntity(val)
+    end,
+    Weapon = function(val)
+        net.writeUInt(5, 4)
+        net.writeEntity(val)
     end
 }
 
