@@ -180,6 +180,10 @@ typeWrite = {
     Weapon = function(val)
         net.writeUInt(5, 4)
         net.writeEntity(val)
+    end,
+    Hologram = function(val)
+        net.writeUInt(5, 4)
+        net.writeEntity(val)
     end
 }
 
