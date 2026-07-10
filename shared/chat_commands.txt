@@ -86,6 +86,7 @@ if SERVER then
     
     local commands = {}
     local aliases = {}
+    local aliasedCommands = {}
     local prefixes = "!/."
     local show_alerts = true
     local owner_only = true
@@ -107,13 +108,25 @@ if SERVER then
         for _, alias in ipairs({...}) do
             if type(alias) ~= "string" then continue end
             
-            commands[alias] = commands[command]
+            aliasedCommands[alias] = commands[command]
             table.insert(aliases[command], alias)
         end
     end
     
     function chat.findAliases(command)
         return aliases[command] or false
+    end
+    
+    function chat.getAllCommands()
+        local result = {}
+        for k, v in pairs(commands) do
+            result[k] = {
+                func = v,
+                aliases = chat.findAliases(k)
+            }
+        end
+        
+        return result
     end
     
     function chat.showAlerts(bool)
@@ -141,8 +154,10 @@ if SERVER then
             
             local commandExists = false
             local customReturn = ""
-            if commands[identifier] then
-                local callback, owner_only = unpack(commands[identifier])
+            
+            local cmd = commands[identifier] or aliasedCommands[identifier]
+            if cmd then
+                local callback, owner_only = unpack(cmd)
                 if owner_only and ply ~= owner() then return "" end
                 
                 customReturn = callback(ply, table.concat(args, " "), args)
