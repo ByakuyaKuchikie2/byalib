@@ -102,10 +102,12 @@ if SERVER then
     
     function chat.addAlias(command, ...)
         if not commands[command] then return end
+        if not aliases[command] then aliases[command] = {} end
+        
         for _, alias in ipairs({...}) do
             if type(alias) ~= "string" then continue end
+            
             commands[alias] = commands[command]
-            if not aliases[command] then aliases[command] = {} end
             table.insert(aliases[command], alias)
         end
     end
