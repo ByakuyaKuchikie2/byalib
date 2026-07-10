@@ -103,7 +103,8 @@ if SERVER then
     function chat.addAlias(command, alias)
         if not commands[command] then return end
         commands[alias] = commands[command]
-        table.insert(aliases[alias], command)
+        if not aliases[command] then aliases[command] = {} end
+        table.insert(aliases[command], alias)
     end
     
     function chat.findAliases(command)
