@@ -59,6 +59,9 @@
         > WARNING: The existing base command must be registered first before you 
         > can add an alias to it.
         
+    * chat.findAlises(commandName)
+        Find all aliases for a command
+        
     * chat.removeCommand(name)
         Unregisters a command or an alias by its identifier name.
         > NOTE: If you pass an alias name here, only that specific alias is unlinked.
@@ -82,6 +85,7 @@ if SERVER then
     chat = chat or {}
     
     local commands = {}
+    local aliases = {}
     local prefixes = "!/."
     local show_alerts = true
     local owner_only = true
@@ -99,6 +103,11 @@ if SERVER then
     function chat.addAlias(command, alias)
         if not commands[command] then return end
         commands[alias] = commands[command]
+        table.insert(aliases[alias], command)
+    end
+    
+    function chat.findAliases(command)
+        return aliases[command] or false
     end
     
     function chat.showAlerts(bool)
