@@ -249,4 +249,4 @@ elseif SERVER then
     end
 end
 
-if old_net then net = old_net end
+if old_net then _G.net = old_net end

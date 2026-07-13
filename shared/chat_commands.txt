@@ -144,7 +144,7 @@ if SERVER then
         end
     end
     
-    hook.add("PlayerSay", "chat_commands", function(ply, text) 
+    hook.add("PlayerSay", "LIB:CHAT_COMMANDS", function(ply, text)
         if string.find(prefixes, text[1], nil, true) then
             if #text <= 1 then return end
             
@@ -165,25 +165,30 @@ if SERVER then
             end
             
             if not commandExists and show_alerts then 
-                net.send(ply, "LIB_CC_NET", 
-                    team.getColor(owner():getTeam()), string.format("[FROM %s] ", owner():getName()), 
-                    Color(255,0,0), "[ERROR] ", 
-                    Color(255,255,255), "no command found ", 
-                    Color(255,0,0), ("%q"):format(identifier)
-                )
+                net.send(ply, "LIB_CC_NET", 2, owner(), {"no command found ", Color(255,0,0), string.format("%q", identifier)})
             end
             return customReturn
         end
     end)
 elseif CLIENT then
-    net.addCallback("LIB_CC_NET", function(...)
-        printConsole(...)
-        
+    local function printMsg(...)
         local args = {...}
-        table.remove(args, 1)
-        table.remove(args, 1)
-        print(unpack(args))
-    end)
+        local level = table.remove(args, 1)
+        local ply = table.remove(args, 1)
+        
+        local msg = table.remove(args, 1)
+        
+        local tbl
+        if level == 0 then return 
+        elseif level == 1 then
+            tbl = {team.getColor(ply:getTeam()), string.format("[FROM %s] ", ply:getName()), Color(200,100,0), "[WARNING] ", Color(255,255,255), unpack(msg)}
+        elseif level == 2 then
+            tbl = {team.getColor(ply:getTeam()), string.format("[FROM %s] ", ply:getName()), Color(255,0,0), "[ERROR] ", Color(255,255,255), unpack(msg)}
+        end
+        printConsole(unpack(tbl))
+        print(unpack(tbl))
+    end
+    net.addCallback("LIB_CC_NET", printMsg)
 end
 
-if old_net then net = old_net end
+if old_net then _G.net = old_net end
