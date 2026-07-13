@@ -36,4 +36,4 @@ elseif CLIENT then
         net.send("INPUT:TRIGGERED", key or -1, false); hook.run("KeyInput", key or -1, false) end)
 end
 
-if old_net then _G.net = old_net end
+_G.net = old_net or net

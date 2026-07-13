@@ -191,4 +191,4 @@ elseif CLIENT then
     net.addCallback("LIB_CC_NET", printMsg)
 end
 
-if old_net then _G.net = old_net end
+_G.net = old_net or net
