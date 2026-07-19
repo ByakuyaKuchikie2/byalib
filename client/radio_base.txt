@@ -4,11 +4,12 @@
     Radio lib by ByakuyaKuchiki
     functionality
         :play(string)               - plays/queues an audio
-        :pause()                    - pauses/resumes the radio
+        :pause(state)               - pauses/resumes the radio
         :next()                     - plays the next audio in the queue
         :isPlaying()                - returns if the radio is playing an audio
         :getPlaying()               - returns the currently playing audio and its url
         :getQueue()                 - returns the queue
+        :queueIsEmpty()             - returns if queue is empty
         :setVolume(number)          - sets the volume
         :stop()                     - stops the audio and clears the queue
         :setFade(number, number)    - sets the fade/distance of the audio
@@ -31,18 +32,20 @@
             Called when an audio has begun playing
             Arguments: None
             
-        - onended
+        - onPaused
+            Called when radio was paused/resumed
+            Arguments: IsPaused
+            
+        - onEnd
             Called when an audio has been ended, skipped, or stopped
             Arguments: None
 
 ]]
---@name radio_base
---@author
 --@client
---@include byalib/universal/queue.txt
+--@include audio_visualizer/utilities/queue.txt
 local radio = {}
 radio.__index = radio
-radio.queue = require('byalib/universal/queue.txt')
+radio.queue = require('audio_visualizer/utilities/queue.txt')
 
 radio.audio = nil
 radio.playing = false
@@ -50,22 +53,28 @@ radio.volume = 0.35
 radio.fade = {128,256}
 radio.url = ''
 radio.noblock = true
+radio.entity = chip()
 
 radio.hooks = {
     think = {},
     onplay = {},
+    onpaused = {},
     onend = {}
 }
 
-local function execHooks(type)
+local function execHooks(type, ...)
     type = string.lower(type)
     for name, func in pairs(radio.hooks[type]) do
-        func()
+        func(...)
     end
 end
 
 function radio:useNoblock(state)
     self.noblock = state
+end
+
+function radio:setParent(ent)
+    self.parent = ent
 end
 
 function radio:play(url)
@@ -108,23 +117,23 @@ function radio:next()
     self:play(url)
 end
 
-function radio:pause(state)
-    if not state then
-        self.playing = not self.playing
-    else
-        self.playing = state
-    end
-    
+function radio:pause(state) --false to pause, true to unpause
+    local shouldPlay = (state == nil) and not self.playing or state
+
+    self.playing = shouldPlay
+
     if isValid(self.audio) then 
-        if self.playing then
+        if shouldPlay then
+            self.audio:play()
+        else
             self.audio:pause()
-            return self.playing
         end
-        
-        self.audio:play()
     end
     
-    return self.playing
+    local isPaused = not shouldPlay
+    execHooks('onPaused', isPaused)
+    
+    return isPaused
 end
 
 function radio:isPlaying() 
@@ -171,7 +180,7 @@ function radio:stop()
     self.url = ''
     
     self.queue:clear()
-    execHooks('onend')
+    execHooks('onEnd')
 end
 
 function radio:skip()
@@ -180,7 +189,7 @@ function radio:skip()
     end
     
     self:next()
-    execHooks('onend')
+    execHooks('onEnd')
 end
 
 function radio:addHook(type, name, func)
@@ -205,7 +214,7 @@ end
 
 function radio:think() -- can be overriden
     if isValid(self.audio) and self.playing then
-        self.audio:setPos(chip():getPos())
+        self.audio:setPos((self.parent or chip()):getPos())
         
         local time, duration = self.audio:getTime(), self.audio:getLength()
         if time >= duration then
