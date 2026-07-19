@@ -145,7 +145,7 @@ if SERVER then
     end
     
     hook.add("PlayerSay", "LIB:CHAT_COMMANDS", function(ply, text)
-        if string.find(prefixes, text[1], nil, true) then
+        if string.find(prefixes, text:sub(1,1), nil, true) then
             if #text <= 1 then return end
             
             local args = string.explode(" ", text:sub(2))
