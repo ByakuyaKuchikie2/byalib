@@ -77,8 +77,8 @@ local old_net
 local net = net
 if not easynet then
     old_net = table.copy(net)
-    --@include byalib/shared/easynet.txt
-    net = require("byalib/shared/easynet.txt")
+    --@include https://raw.githubusercontent.com/ByakuyaKuchikie2/byalib/refs/heads/main/shared/easynet.txt as easynet
+    net = require("easynet")
 end
 
 if SERVER then
